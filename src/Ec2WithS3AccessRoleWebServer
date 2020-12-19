@@ -1,0 +1,101 @@
+# Creates an EC2 Amazon Linux 2 AMI (HVM), SSD Volume Type T2 Micro instance with java preinstalled and
+#  following ports open
+#  ssh port 22
+#  http 80
+#  TCP 8080, 8081, 8082
+#
+#  Attached role has read only access to S3
+
+Resources:
+  devinstance:
+    # http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-ec2-instance.html
+    Type: AWS::EC2::Instance
+    Properties:
+      AvailabilityZone: us-west-1c
+      ImageId: ami-08d9a394ac1c2994c # Amazon Linux 2 AMI (HVM), SSD Volume Type
+      InstanceType: t2.micro
+      SecurityGroups:
+        - !Ref SSHSecurityGroup
+        - !Ref WebSecurityGroup
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          sudo yum update -y
+          sudo amazon-linux-extras enable corretto8 -y
+          sudo yum install java-1.8.0-amazon-corretto -y
+      KeyName: professional
+      IamInstanceProfile: !Ref 'DevInstanceProfile'
+      Tags:
+        - devinstance
+
+  SSHSecurityGroup:
+    # http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-ec2-security-group.html
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH access via port 22
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          FromPort: 22
+          IpProtocol: tcp
+          ToPort: 22
+
+  WebSecurityGroup:
+    # http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-ec2-security-group.html
+    # opens 8080 8081 and 8082 ports
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: allow connections from specified CIDR ranges
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8081
+          ToPort: 8081
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8082
+          ToPort: 8082
+          CidrIp: 0.0.0.0/0
+
+  DevInstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Path: /
+      Roles:
+        - !Ref DevRole
+
+  DevRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "ec2.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      RoleName: "Ec2AccessRole"
+      ManagedPolicyArns:
+        - !Ref Ec2AccessPolicy
+
+  Ec2AccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowAllUsersToListAccounts
+            Effect: Allow
+            Action:
+              - s3:Get*
+              - s3:List*
+            Resource: "*"
